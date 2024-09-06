@@ -13,7 +13,7 @@ Send /start to initiate the conversation.
 Press Ctrl-C on the command line or send a signal to the process to stop the
 bot.
 """
-
+from enum import Enum
 import logging
 import os
 import dotenv
@@ -26,8 +26,13 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
     MessageHandler,
-    filters,
 )
+from utils import getPhotoResponse
+
+class State(Enum):
+    PHOTO=1,
+    REPLY_PHOTO=2,
+    END=3
 
 # Enable logging
 logging.basicConfig(
@@ -38,95 +43,71 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-GENDER, PHOTO, LOCATION, BIO = range(4)
-
-
+# pre-starter
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation and asks the user about their gender."""
-    reply_keyboard = [["Boy", "Girl", "Other"]]
+    reply_keyboard = [["start"]]
 
     await update.message.reply_text(
-        "Hi! My name is Professor Bot. I will hold a conversation with you. "
-        "Send /cancel to stop talking to me.\n\n"
-        "Are you a boy or a girl?",
+        """FITON 智能健康管家是透過 AI 為每一位
+        用戶量身訂做合適的健康計畫。
+
+        食物評分 Food Rating
+        使用照片或是文字跟 FITON 說你想吃什麼，
+        FITON 就會直接告訴您這個食物的評分、熱量
+        以及營養素分析內容
+
+        飲食習慣紀錄 Dietary Habits Record
+        告訴 FITON 您吃的食物後，FITON 會紀錄此
+        食物的熱量及營養素，往後會根據用戶的飲食
+        習慣逐步推薦可持續的健康飲食
+
+        社群激勵 Community Motivation
+        將 FITON 加入群組，並設為管理員，FITON 
+        將會協助群主推動健康生活
+
+        代幣獎勵 Token Rewards
+        FITON 透過 AI 以及專業營養師的建議，得出
+        一個運算健康指數的公式，根據每日健康指數
+        的累積，可獲得相對應的代幣。
+
+        健康報告及規劃 Health Reports and Plan
+        點擊左下角的 Start 或是輸入 /start，即可開
+        啟 FITON 儀表板。
+        裡面有您的健康報告以及為您量身定做的健康
+        菜單。
+        """,
         reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, input_field_placeholder="Boy or Girl?"
+            reply_keyboard,
+            one_time_keyboard=True,
+            input_field_placeholder="just press \"start\""
         ),
     )
 
-    return GENDER
-
-
-async def gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the selected gender and asks for a photo."""
+    return State.PHOTO
+# photo
+async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
-    logger.info("Gender of %s: %s", user.first_name, update.message.text)
+    logger.info("photo of %s: %s", user.first_name, update.message.text)
     await update.message.reply_text(
-        "I see! Please send me a photo of yourself, "
+        "I see! Please send me a photo of the food, "
         "so I know what you look like, or send /skip if you don't want to.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
-    return PHOTO
+    return State.REPLY_PHOTO
 
 
-async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the photo and asks for a location."""
     user = update.message.from_user
     photo_file = await update.message.photo[-1].get_file()
     await photo_file.download_to_drive("user_photo.jpg")
     logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
     await update.message.reply_text(
-        "Gorgeous! Now, send me your location please, or send /skip if you don't want to."
+        getPhotoResponse("example")
     )
 
-    return LOCATION
-
-
-async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Skips the photo and asks for a location."""
-    user = update.message.from_user
-    logger.info("User %s did not send a photo.", user.first_name)
-    await update.message.reply_text(
-        "I bet you look great! Now, send me your location please, or send /skip."
-    )
-
-    return LOCATION
-
-
-async def location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the location and asks for some info about the user."""
-    user = update.message.from_user
-    user_location = update.message.location
-    logger.info(
-        "Location of %s: %f / %f", user.first_name, user_location.latitude, user_location.longitude
-    )
-    await update.message.reply_text(
-        "Maybe I can visit you sometime! At last, tell me something about yourself."
-    )
-
-    return BIO
-
-
-async def skip_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Skips the location and asks for info about the user."""
-    user = update.message.from_user
-    logger.info("User %s did not send a location.", user.first_name)
-    await update.message.reply_text(
-        "You seem a bit paranoid! At last, tell me something about yourself."
-    )
-
-    return BIO
-
-
-async def bio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the info about the user and ends the conversation."""
-    user = update.message.from_user
-    logger.info("Bio of %s: %s", user.first_name, update.message.text)
-    await update.message.reply_text("Thank you! I hope we can talk again some day.")
-
-    return ConversationHandler.END
-
+    return State.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels and ends the conversation."""
@@ -141,7 +122,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def main() -> None:
     """Run the bot."""
+
     token = os.getenv("BOT_TOKEN")  # Load token from environment variable
+    print(token)
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(token).build()
 
@@ -149,13 +132,8 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            GENDER: [MessageHandler(filters.Regex("^(Boy|Girl|Other)$"), gender)],
-            PHOTO: [MessageHandler(filters.PHOTO, photo), CommandHandler("skip", skip_photo)],
-            LOCATION: [
-                MessageHandler(filters.LOCATION, location),
-                CommandHandler("skip", skip_location),
-            ],
-            BIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, bio)],
+            State.PHOTO: [MessageHandler(None, photo)],
+            State.REPLY_PHOTO: [MessageHandler(None, replyPhoto)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )

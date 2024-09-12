@@ -16,6 +16,8 @@ bot.
 from enum import Enum
 import logging
 import os
+import base64
+from io import BytesIO
 import dotenv
 dotenv.load_dotenv()
 
@@ -26,13 +28,15 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
     MessageHandler,
+    filters
 )
-from utils import getPhotoResponse
+from utils import getPhotoResponse, getTextResponse
 
 class State(Enum):
     PHOTO=1,
     REPLY_PHOTO=2,
-    END=3
+    REPLY_TEXT=3,
+    END=4
 
 # Enable logging
 logging.basicConfig(
@@ -46,6 +50,10 @@ logger = logging.getLogger(__name__)
 # pre-starter
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     reply_keyboard = [["start"]]
+
+    # Initialize user chat history if it doesn't exist
+    if "chat_history" not in context.user_data:
+        context.user_data["chat_history"] = []
 
     await update.message.reply_text(
         """FITON 智能健康管家是透過 AI 為每一位
@@ -84,33 +92,66 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
 
     return State.PHOTO
-# photo
+
+# Handle photo input
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
     logger.info("photo of %s: %s", user.first_name, update.message.text)
     await update.message.reply_text(
-        "I see! Please send me a photo of the food, "
-        "so I know what you look like, or send /skip if you don't want to.",
+        "Please send me a photo of the food for analysis, or send /skip if you prefer to use text.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
     return State.REPLY_PHOTO
 
+# Handle text input
+async def replyText(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.message.from_user
+    user_input = update.message.text
+    logger.info("Text message from %s: %s", user.first_name, user_input)
 
+    # Append to user's chat history
+    context.user_data["chat_history"].append({"role": "user", "content": user_input})
+
+    # Get response from GPT API based on chat history
+    response_text = getTextResponse(context.user_data["chat_history"])
+
+    # Append GPT response to chat history
+    context.user_data["chat_history"].append({"role": "assistant", "content": response_text})
+
+    await update.message.reply_text(response_text)
+    
+    return State.REPLY_PHOTO
+
+
+# Reply to photo
 async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the photo and asks for a location."""
     user = update.message.from_user
     photo_file = await update.message.photo[-1].get_file()
-    await photo_file.download_to_drive("user_photo.jpg")
-    logger.info("Photo of %s: %s", user.first_name, "user_photo.jpg")
-    await update.message.reply_text(
-        getPhotoResponse("example")
-    )
+    
+    # Read the photo content directly into memory without saving it to disk
+    photo_bytes = await photo_file.download_as_bytearray()
 
-    return State.END
+    # Encode the photo content to base64
+    base64_image = base64.b64encode(photo_bytes).decode("utf-8")
+    
+    logger.info("Photo of %s: processed.", user.first_name)
+    
+    # Append photo info to chat history (you can also store a textual reference)
+    context.user_data["chat_history"].append({"role": "user", "content": "User sent a photo"})
 
+    # Get response from GPT API with the image and chat history
+    response_text = getPhotoResponse(context.user_data["chat_history"], base64_image)
+
+    # Append GPT response to chat history
+    context.user_data["chat_history"].append({"role": "assistant", "content": response_text})
+    
+    await update.message.reply_text(response_text)
+    
+    return State.REPLY_PHOTO
+
+# Cancel the conversation
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends the conversation."""
     user = update.message.from_user
     logger.info("User %s canceled the conversation.", user.first_name)
     await update.message.reply_text(
@@ -119,21 +160,25 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ConversationHandler.END
 
-
+# Main function to run the bot
 def main() -> None:
-    """Run the bot."""
-
     token = os.getenv("BOT_TOKEN")  # Load token from environment variable
     print(token)
+    
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(token).build()
 
-    # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
+    # Add conversation handler with the states
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            State.PHOTO: [MessageHandler(None, photo)],
-            State.REPLY_PHOTO: [MessageHandler(None, replyPhoto)],
+            State.PHOTO: [
+                MessageHandler(None, photo),  # Handles photo input
+            ],
+            State.REPLY_PHOTO: [
+                MessageHandler(filters.PHOTO, replyPhoto),  # Handles the reply to photo
+                MessageHandler(filters.TEXT, replyText)  # Handles the reply to text
+            ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -142,7 +187,6 @@ def main() -> None:
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()

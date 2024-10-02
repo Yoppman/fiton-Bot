@@ -169,6 +169,8 @@ def main() -> None:
     
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(token).build()
+    job_queue = application.job_queue
+
 
     # Add conversation handler with the states
     conv_handler = ConversationHandler(
@@ -186,6 +188,7 @@ def main() -> None:
             ]
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
     )
 
     application.add_handler(conv_handler)

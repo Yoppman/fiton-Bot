@@ -19,6 +19,7 @@ import os
 import base64
 from io import BytesIO
 import dotenv
+
 dotenv.load_dotenv()
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
@@ -33,10 +34,11 @@ from telegram.ext import (
 from utils import getPhotoResponse, getTextResponse
 
 class State(Enum):
-    PHOTO=1,
-    REPLY_PHOTO=2,
-    REPLY_TEXT=3,
-    END=4
+    HELTH_STATE=1,
+    PHOTO=2,
+    REPLY_PHOTO=3,
+    REPLY_TEXT=4,
+    END=5
 
 # Enable logging
 logging.basicConfig(
@@ -56,38 +58,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data["chat_history"] = []
 
     await update.message.reply_text(
-        """FITON 智能健康管家是透過 AI 為每一位
-        用戶量身訂做合適的健康計畫。
-
-        食物評分 Food Rating
-        使用照片或是文字跟 FITON 說你想吃什麼，
-        FITON 就會直接告訴您這個食物的評分、熱量
-        以及營養素分析內容
-
-        飲食習慣紀錄 Dietary Habits Record
-        告訴 FITON 您吃的食物後，FITON 會紀錄此
-        食物的熱量及營養素，往後會根據用戶的飲食
-        習慣逐步推薦可持續的健康飲食
-
-        社群激勵 Community Motivation
-        將 FITON 加入群組，並設為管理員，FITON 
-        將會協助群主推動健康生活
-
-        代幣獎勵 Token Rewards
-        FITON 透過 AI 以及專業營養師的建議，得出
-        一個運算健康指數的公式，根據每日健康指數
-        的累積，可獲得相對應的代幣。
-
-        健康報告及規劃 Health Reports and Plan
-        點擊左下角的 Start 或是輸入 /start，即可開
-        啟 FITON 儀表板。
-        裡面有您的健康報告以及為您量身定做的健康
-        菜單。
+        """請輸入身高(cm)&體重(kg)
         """,
+        # reply_markup=ReplyKeyboardMarkup(
+        #     reply_keyboard,
+        #     one_time_keyboard=True,
+        #     input_field_placeholder="just press \"start\""
+        # ),
+    )
+
+    return State.HELTH_STATE
+
+async def heathState(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> int:
+
+    reply_keyboard = [["適中", "精壯", "健美"]]
+
+    await update.message.reply_text(
+        """請問您希望維持的健康狀態""",
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard,
-            one_time_keyboard=True,
-            input_field_placeholder="just press \"start\""
+            one_time_keyboard=False,
         ),
     )
 
@@ -96,9 +89,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # Handle photo input
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
-    logger.info("photo of %s: %s", user.first_name, update.message.text)
+    message = update.message.text
+
+    logger.info(
+        "photo of %s: %s",
+        user.first_name, update.message.text
+    )
+
+    selectedState = update.message.text
     await update.message.reply_text(
-        "Please send me a photo of the food for analysis, or send /skip if you prefer to use text.",
+        f"""您希望維持的狀態為 {selectedState}
+FITON 將會根據您的身體數據、飲食習慣以及
+您期望的狀態，協助您一步一步達成目標。
+如想要更換狀態，可輸入 /change。""",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -163,7 +166,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # Main function to run the bot
 def main() -> None:
     token = os.getenv("BOT_TOKEN")  # Load token from environment variable
-    print(token)
     
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(token).build()
@@ -172,6 +174,9 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+            State.HELTH_STATE: [
+                MessageHandler(filters.TEXT, heathState)
+            ],
             State.PHOTO: [
                 MessageHandler(None, photo),  # Handles photo input
             ],

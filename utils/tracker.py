@@ -66,7 +66,7 @@ class UserTracker:
         
         # Generate response from OpenAI GPT
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=messages,
             temperature=1.5,
             max_tokens=50,

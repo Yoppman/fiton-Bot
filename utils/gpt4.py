@@ -48,7 +48,7 @@ def getPhotoResponse(chat_history: list, base64_image) -> dict:
     
     # Call the GPT-4 API
     response = client.chat.completions.create(
-        model="gpt-4o",  # Use correct model ID
+        model="gpt-4o-mini",  # Use correct model ID
         messages=messages,
         temperature=0.2,
         max_tokens=512,
@@ -86,7 +86,7 @@ def getTextResponse(chat_history: list) -> str:
     
     # Call the GPT-4 API with the complete chat history
     response = client.chat.completions.create(
-        model="gpt-4o",  # Use correct model ID
+        model="gpt-4o-mini",  # Use correct model ID
         messages=messages,
         temperature=0.2,
         max_tokens=1024,

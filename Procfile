@@ -1,1 +1,1 @@
-web: make install && make run
+worker: make install && make run

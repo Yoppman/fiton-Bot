@@ -65,3 +65,4 @@ wandb==0.17.9 ; python_version >= "3.12" and python_version < "4.0"
 weave==0.51.2 ; python_version >= "3.12" and python_version < "4.0"
 werkzeug==3.0.4 ; python_version >= "3.12" and python_version < "4.0"
 yarl==1.11.1 ; python_version >= "3.12" and python_version < "4.0"
+poetry

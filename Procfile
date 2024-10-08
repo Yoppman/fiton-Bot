@@ -1,1 +1,1 @@
-worker: curl -sSL https://install.python-poetry.org | python3 - && poetry install && make run
+worker: export PATH="/app/.local/bin:$PATH" && curl -sSL https://install.python-poetry.org | python3 - && poetry install && make run

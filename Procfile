@@ -1,1 +1,1 @@
-worker: make install && make run
+worker: curl -sSL https://install.python-poetry.org | python3 - && poetry install && make run

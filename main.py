@@ -18,11 +18,13 @@ import logging
 import os
 import base64
 from io import BytesIO
+from PIL import Image
 # import dotenv
 
 # dotenv.load_dotenv()
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -31,7 +33,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from utils import getPhotoResponse, getTextResponse
+from utils import getPhotoResponse, getTextResponse, escape_markdown_v2
 
 class State(Enum):
     HELTH_STATE=1,
@@ -131,7 +133,7 @@ async def replyText(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.message.from_user
     photo_file = await update.message.photo[-1].get_file()
-    
+
     # Read the photo content directly into memory without saving it to disk
     photo_bytes = await photo_file.download_as_bytearray()
 
@@ -140,17 +142,31 @@ async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     logger.info("Photo of %s: processed.", user.first_name)
     
-    # Append photo info to chat history (you can also store a textual reference)
+    # Append photo info to chat history
     context.user_data["chat_history"].append({"role": "user", "content": "User sent a photo"})
 
-    # Get response from GPT API with the image and chat history
-    response_text = getPhotoResponse(context.user_data["chat_history"], base64_image)
-
+    # Get both the text response and chart from GPT API
+    response = getPhotoResponse(context.user_data["chat_history"], base64_image)
+    response_text = response["text_response"]
+    chart_base64 = response["chart_image_base64"]
+    
     # Append GPT response to chat history
     context.user_data["chat_history"].append({"role": "assistant", "content": response_text})
     
-    await update.message.reply_text(response_text)
+    # Send the text response back to the user
+    response_text = escape_markdown_v2(response_text)
+    await update.message.reply_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
     
+    # Decode the chart image from base64 and send it back as a photo
+    chart_bytes = base64.b64decode(chart_base64)
+    chart_image = Image.open(BytesIO(chart_bytes))
+
+    # Convert the chart to a byte stream so it can be sent as a photo
+    with BytesIO() as image_binary:
+        chart_image.save(image_binary, format='PNG')
+        image_binary.seek(0)
+        await update.message.reply_photo(photo=image_binary)
+
     return State.REPLY_PHOTO
 
 # Cancel the conversation

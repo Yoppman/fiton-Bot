@@ -10,7 +10,7 @@ def extract_nutrition_data(response_text: str) -> dict:
         "calories": 0,
         "carbohydrates": 0,
         "protein": 0,
-        "": 0
+        "fats": 0
     }
     
     # Regex patterns to capture the nutritional values with potential whitespace variations

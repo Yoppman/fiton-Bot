@@ -14,7 +14,7 @@ def extract_nutrition_data(response_text: str) -> dict:
     }
     
     # Regex patterns to capture the nutritional values with potential whitespace variations
-    calorie_pattern = re.compile(r"總熱量估計為.*?(\d+\.?\d*)\s*大卡")
+    calorie_pattern = re.compile(r"總熱量估計為.*?([\d{1,3}(,\d{3})*]+\.?\d*)\s*大卡")
     carb_pattern = re.compile(r"總碳水估計為.*?(\d+\.?\d*)\s*克")
     protein_pattern = re.compile(r"總蛋白質估計為.*?(\d+\.?\d*)\s*克")
     fat_pattern = re.compile(r"總脂肪估計為.*?(\d+\.?\d*)\s*克")
@@ -22,8 +22,8 @@ def extract_nutrition_data(response_text: str) -> dict:
     # Find the calorie valuefats
     match = calorie_pattern.search(response_text)
     if match:
-        data["calories"] = float(match.group(1))
-
+        # Remove commas and convert the number to float
+        data["calories"] = float(match.group(1).replace(',', ''))
     # Find the carbohydrate value
     match = carb_pattern.search(response_text)
     if match:
@@ -51,7 +51,27 @@ def create_nutrition_chart(data: dict) -> str:
     # Total calories (sum of the sizes for simplicity)
     total_calories = data["calories"]
 
-    # Create the figure and axis, and set the background color
+    # Check if all sizes are zero (no carbs, fats, or protein)
+    if sum(sizes) == 0:
+        # Create a congratulatory image when the diet is very healthy (no macronutrients)
+        fig, ax = plt.subplots()
+        fig.patch.set_facecolor('#2e3b4e')  # Set background color
+        
+        # Display motivational message
+        ax.text(0.5, 0.5, "Your diet is really healthy!\nKeep it on!", 
+                ha='center', va='center', fontsize=24, fontweight='bold', color='white')
+        ax.set_axis_off()  # Hide the axis
+        
+        # Save image to a buffer and return it as base64
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        buf.close()
+
+        return img_base64
+
+    # Proceed with normal pie chart generation
     fig, ax = plt.subplots()
     fig.patch.set_facecolor('#2e3b4e')  # Set background color
 
@@ -109,3 +129,10 @@ def create_nutrition_chart(data: dict) -> str:
     buf.close()
 
     return img_base64
+
+def is_food(text: str) -> bool:
+    # Check if the specified phrase is in the text
+    if "食物評分 Food Rating" in text:
+        return True
+    else:
+        return False

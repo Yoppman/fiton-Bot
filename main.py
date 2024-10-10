@@ -101,9 +101,9 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     selectedState = update.message.text
     await update.message.reply_text(
         f"""您希望維持的狀態為 {selectedState}
-FITON 將會根據您的身體數據、飲食習慣以及
-您期望的狀態，協助您一步一步達成目標。
-如想要更換狀態，可輸入 /change。""",
+        FITON 將會根據您的身體數據、飲食習慣以及
+        您期望的狀態，協助您一步一步達成目標。
+        如想要更換狀態，可輸入 /change。""",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -145,6 +145,9 @@ async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Append photo info to chat history
     context.user_data["chat_history"].append({"role": "user", "content": "User sent a photo"})
 
+    # Send a temporary "loading" message to the user
+    loading_message = await update.message.reply_text("Processing your image, please wait ... ✨")
+
     # Get both the text response and chart from GPT API
     response = getPhotoResponse(context.user_data["chat_history"], base64_image)
     response_text = response["text_response"]
@@ -153,19 +156,20 @@ async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Append GPT response to chat history
     context.user_data["chat_history"].append({"role": "assistant", "content": response_text})
     
-    # Send the text response back to the user
+    # Edit the loading message with the final text response
     response_text = escape_markdown_v2(response_text)
-    await update.message.reply_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
+    await loading_message.edit_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
     
-    # Decode the chart image from base64 and send it back as a photo
-    chart_bytes = base64.b64decode(chart_base64)
-    chart_image = Image.open(BytesIO(chart_bytes))
+    if chart_base64 is not None:
+        # Decode the chart image from base64 and send it back as a photo
+        chart_bytes = base64.b64decode(chart_base64)
+        chart_image = Image.open(BytesIO(chart_bytes))
 
-    # Convert the chart to a byte stream so it can be sent as a photo
-    with BytesIO() as image_binary:
-        chart_image.save(image_binary, format='PNG')
-        image_binary.seek(0)
-        await update.message.reply_photo(photo=image_binary)
+        # Convert the chart to a byte stream so it can be sent as a photo
+        with BytesIO() as image_binary:
+            chart_image.save(image_binary, format='PNG')
+            image_binary.seek(0)
+            await update.message.reply_photo(photo=image_binary)
 
     return State.REPLY_PHOTO
 

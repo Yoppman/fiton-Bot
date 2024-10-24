@@ -56,21 +56,26 @@ To set up the environment, follow these steps:
 ## Project Structure
 
 ```
-├── fitonbot/
-│   ├── __init__.py
-│   ├── bot.py        # Main bot logic and handlers
-│   ├── ai_client.py  # Logic for OpenAI API integration
-│   └── photo_handler.py  # Logic for handling user-uploaded photos
+fiton-Bot/
+├── .idea/                  # IDE configuration files
+├── fittonbot/
+│   ├── __init__.py         # Initializes the fittonbot package
 ├── tests/
-│   ├── test_bot.py   # Unit tests for bot commands
-│   └── test_ai.py    # Unit tests for AI client
+│   ├── __init__.py         # Initializes the tests package
 ├── utils/
-│   ├── helpers.py    # Utility functions
-├── .env.template     # Template for environment variables
-├── poetry.lock       # Poetry lock file
-├── pyproject.toml    # Poetry project file
-├── README.md         # Project README
-└── requirements.txt  # Dependency file for non-poetry setups
+│   ├── __init__.py         # Initializes the utils package
+│   ├── gpt4.py             # Logic for interacting with GPT-4 API
+│   ├── tracker.py          # Tracks user interactions and bot state
+├── .env.template           # Template for environment variables configuration
+├── .gitignore              # Specifies files to be ignored by Git
+├── Procfile                # Instructions for deployment on Heroku or similar services
+├── README.md               # Project overview and instructions
+├── main.py                 # Main script to run the bot
+├── makefile                # Script for automation tasks
+├── poetry.lock             # Dependency lock file for Poetry
+├── pyproject.toml          # Project configuration file for Poetry
+├── requirements.txt        # List of dependencies for non-Poetry setups
+└── user_photo.jpg          # Example or placeholder user photo for testing
 ```
 
 ## Contributing

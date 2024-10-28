@@ -19,11 +19,13 @@ import os
 import base64
 from io import BytesIO
 from PIL import Image
-# import dotenv
+import requests
+import asyncio
+import dotenv
 
-# dotenv.load_dotenv()
+dotenv.load_dotenv()
 
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, BotCommand
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -31,12 +33,17 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
     MessageHandler,
-    filters
+    filters,
+    PreCheckoutQueryHandler,
+    CallbackQueryHandler
 )
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils import getPhotoResponse, getTextResponse, escape_markdown_v2
+from utils.save_food_to_db import write_food_photo_to_db
+from utils.payment import pay, precheckout_callback, successful_payment_callback
 
 class State(Enum):
-    HELTH_STATE=1,
+    HEALTH_STATE=1,
     PHOTO=2,
     REPLY_PHOTO=3,
     REPLY_TEXT=4,
@@ -51,42 +58,109 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+API_BASE_URL = "http://127.0.0.1:8000"  # Adjust this to match your backend's base URL
+
 # pre-starter
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     reply_keyboard = [["start"]]
+    telegram_user_id = update.message.from_user.id  # Unique Telegram user ID
+    telegram_user_name = update.message.from_user.username  # Username from Telegram
+    print("name:", telegram_user_name)
+    print("id:", telegram_user_id)
 
-    # Initialize user chat history if it doesn't exist
+
+    # Define the endpoint and payload for the API request
+    user_api_url = f"{API_BASE_URL}/users/"
+    user_data = {
+        "name": telegram_user_name,
+        "age": 0,
+        "height": 0,
+        "weight": 0,
+        "telegram_id": telegram_user_id,
+        "goal": "default"
+    }
+
+    # Check if the user already exists by name
+    response = requests.get(f"{user_api_url}?name={telegram_user_name}")
+
+    if response.status_code == 404:
+        # User not found, proceed to create
+        create_response = requests.post(user_api_url, json=user_data)
+        if create_response.status_code == 201:
+            print("User created successfully.")
+        else:
+            print("Failed to create user:", create_response.json())
+    elif response.status_code == 200:
+        # User already exists
+        print("User already exists.")
+    else:
+        # Handle other unexpected errors
+        print("Error occurred:", response.status_code, response.json())
+
+    # Initialize user chat history if it doesn't exist in the context
     if "chat_history" not in context.user_data:
         context.user_data["chat_history"] = []
 
-    await update.message.reply_text(
-        """請輸入身高(cm)&體重(kg)
-        """,
-        # reply_markup=ReplyKeyboardMarkup(
-        #     reply_keyboard,
-        #     one_time_keyboard=True,
-        #     input_field_placeholder="just press \"start\""
-        # ),
-    )
-
-    return State.HELTH_STATE
-
-async def heathState(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-) -> int:
-
-    reply_keyboard = [["適中", "精壯", "健美"]]
+    # Send a reply to the user
+    reply_keyboard = [["Press to continue"]]
 
     await update.message.reply_text(
-        """請問您希望維持的健康狀態""",
+        f"🎉 Hello, ✨<b><u> {telegram_user_name.upper()} </u></b>✨  Welcome to 🌟 <b>Lipo-Out</b> 🌟 ",
+        parse_mode="HTML",  # Enable Markdown for bold text
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard,
-            one_time_keyboard=False,
+            one_time_keyboard=True,
         ),
     )
 
-    return State.PHOTO
+    return State.HEALTH_STATE
+
+# Ask the user for their health goal
+async def heathState(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Inline keyboard with health goals
+    keyboard = [
+        [InlineKeyboardButton("🌱 Moderate", callback_data="goal_Moderate")],
+        [InlineKeyboardButton("💪 Fit", callback_data="goal_Fit")],
+        [InlineKeyboardButton("🏋️ Bodybuilder", callback_data="goal_Bodybuilder")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "<b>What is your health goal? Choose one to get started:</b>",
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
+
+    return State.HEALTH_STATE
+
+# Handle the health goal choice and save it to the database
+async def handle_goal_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button click
+
+    # Get the selected goal from callback data
+    selected_goal = query.data.split("_")[1]
+
+    # Update user's goal in the database
+    telegram_user_id = update.callback_query.from_user.id
+    user_api_url = f"{API_BASE_URL}/users/?telegram_id={telegram_user_id}"
+    update_data = {"goal": selected_goal}
+
+    response = requests.patch(user_api_url, json=update_data)
+    if response.status_code == 200:
+        await query.edit_message_text(
+            f"""Your goal is set to <b>{selected_goal}</b>! 🎯
+
+<b>Lipo-Out</b> will help guide you step-by-step towards reaching your goal, using your body data, eating habits, and the target you’ve chosen.
+
+Ready to get started? 📸 Upload a photo, and we’ll take care of the analysis for you!""",
+            parse_mode=ParseMode.HTML
+        )    
+    else:   
+        await query.edit_message_text("There was an issue setting your goal. Please try again.")
+
+    # Transition to the next state, such as PHOTO
+    return State.REPLY_PHOTO
 
 # Handle photo input
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -100,10 +174,12 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     selectedState = update.message.text
     await update.message.reply_text(
-        f"""您希望維持的狀態為 {selectedState}
-        FITON 將會根據您的身體數據、飲食習慣以及
-        您期望的狀態，協助您一步一步達成目標。
-        如想要更換狀態，可輸入 /change。""",
+        f"""Your goal is set to <b>{selectedState.upper()}</b>! 🎯
+
+<b>Lipo-Out</b> will help guide you step-by-step towards reaching your goal, using your body data, eating habits, and the target you’ve chosen.
+
+Ready to get started? 📸 Upload a photo, and we’ll take care of the analysis for you!""",
+        parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -157,8 +233,8 @@ async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["chat_history"].append({"role": "assistant", "content": response_text})
     
     # Edit the loading message with the final text response
-    response_text = escape_markdown_v2(response_text)
-    await loading_message.edit_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
+    response_text_escaped = escape_markdown_v2(response_text)
+    await loading_message.edit_text(response_text_escaped, parse_mode=ParseMode.MARKDOWN_V2)
     
     if chart_base64 is not None:
         # Decode the chart image from base64 and send it back as a photo
@@ -171,19 +247,57 @@ async def replyPhoto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             image_binary.seek(0)
             await update.message.reply_photo(photo=image_binary)
 
+        telegram_user_id = update.message.from_user.id  # Unique Telegram user ID
+
+        # Ask the user if they want to save this meal to the database
+        keyboard = [
+            [
+                InlineKeyboardButton("Yes", callback_data="save_yes"),
+                InlineKeyboardButton("No", callback_data="save_no"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Would you like to save this meal to your record?", reply_markup=reply_markup)
+
+        # Store photo and analysis details in context for callback use
+        context.user_data["photo_bytes"] = photo_bytes
+        context.user_data["response_text"] = response_text
+        context.user_data["telegram_user_id"] = telegram_user_id
+
     return State.REPLY_PHOTO
 
-# Cancel the conversation
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.first_name)
-    await update.message.reply_text(
-        "Bye! I hope we can talk again some day.", reply_markup=ReplyKeyboardRemove()
-    )
+# Callback handler to process the user’s choice
+async def handle_save_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button click
 
+    # Determine if the user selected "Yes" or "No"
+    if query.data == "save_yes":
+        # User chose to save the meal
+        photo_bytes = context.user_data.get("photo_bytes")
+        response_text = context.user_data.get("response_text")
+        telegram_user_id = context.user_data.get("telegram_user_id")
+
+        # Call the function to store the meal in the database
+        write_food_photo_to_db(telegram_user_id, photo_bytes, response_text)
+        
+        await query.edit_message_text("Meal saved to your record! ✅")
+    else:
+        # User chose not to save the meal
+        await query.edit_message_text("Meal was not saved to your record. ❌")
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the conversation and reset the state."""
+    await update.message.reply_text(
+        "Your health journey is important to us. If you’re ready to continue, just type /start to begin again anytime! 💪😊"
+    )
+    
+    # Clear user data if necessary
+    context.user_data.clear()
+    
     return ConversationHandler.END
 
-# Main function to run the bot
 def main() -> None:
     token = os.getenv("BOT_TOKEN")  # Load token from environment variable
     
@@ -191,26 +305,36 @@ def main() -> None:
     application = Application.builder().token(token).build()
     job_queue = application.job_queue
 
-
     # Add conversation handler with the states
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler("start", start)],  # Starts with /start command
         states={
-            State.HELTH_STATE: [
-                MessageHandler(filters.TEXT, heathState)
+            State.HEALTH_STATE: [
+                MessageHandler(filters.TEXT & filters.Regex("Press to continue"), heathState),
+                CallbackQueryHandler(handle_goal_selection, pattern="^goal_"),  # Handles goal selection
+                CommandHandler("cancel", cancel)  # Allows cancellation in this state
             ],
             State.PHOTO: [
-                MessageHandler(None, photo),  # Handles photo input
+                MessageHandler(filters.PHOTO, photo),  # Handles photo input in PHOTO state
+                CommandHandler("cancel", cancel)
             ],
             State.REPLY_PHOTO: [
-                MessageHandler(filters.PHOTO, replyPhoto),  # Handles the reply to photo
-                MessageHandler(filters.TEXT, replyText)  # Handles the reply to text
+                CommandHandler("cancel", cancel),
+                MessageHandler(filters.PHOTO, replyPhoto),  # Handles reply to a photo
+                MessageHandler(filters.TEXT, replyText)  # Handles reply to text messages
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel)],  # Fallbacks to cancel command
         allow_reentry=True
     )
 
+    # Add additional handlers
+    application.add_handler(CommandHandler("pay", pay))
+    application.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
+    application.add_handler(CallbackQueryHandler(handle_save_choice, pattern="^save_"))
+
+    # Add the conversation handler to the application
     application.add_handler(conv_handler)
 
     # Run the bot until the user presses Ctrl-C

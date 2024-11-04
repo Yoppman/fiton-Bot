@@ -14,10 +14,10 @@ def extract_nutrition_data(response_text: str) -> dict:
     }
     
     # Regex patterns to capture the nutritional values with potential whitespace variations
-    calorie_pattern = re.compile(r"總熱量估計為.*?([\d{1,3}(,\d{3})*]+\.?\d*)\s*大卡")
-    carb_pattern = re.compile(r"總碳水估計為.*?(\d+\.?\d*)\s*克")
-    protein_pattern = re.compile(r"總蛋白質估計為.*?(\d+\.?\d*)\s*克")
-    fat_pattern = re.compile(r"總脂肪估計為.*?(\d+\.?\d*)\s*克")
+    calorie_pattern = re.compile(r"Total calories.*?([\d{1,3}(,\d{3})*]+\.?\d*)\s*kcal")
+    carb_pattern = re.compile(r"Total carbohydrates.*?(\d+\.?\d*)\s*grams")
+    protein_pattern = re.compile(r"Total protein.*?(\d+\.?\d*)\s*grams")
+    fat_pattern = re.compile(r"Total fats.*?(\d+\.?\d*)\s*grams")
 
     # Find the calorie valuefats
     match = calorie_pattern.search(response_text)
@@ -132,7 +132,7 @@ def create_nutrition_chart(data: dict) -> str:
 
 def is_food(text: str) -> bool:
     # Check if the specified phrase is in the text
-    if "食物評分 Food Rating" in text:
+    if "Food Rating" in text:
         return True
     else:
         return False

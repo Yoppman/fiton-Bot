@@ -10,15 +10,15 @@ def generate_star_rating(health_rating: int, max_rating: int = 10) -> str:
 def replace_health_rating_with_stars(response_text: str, health_rating: int, star_rating: str) -> str:
     # Adjust regex pattern to optionally match "**" before and after "健康評分為"
     # Also handle optional spaces and the optional star emoji 🌟 after the rating number
-    rating_pattern = re.compile(rf"\*\*?健康評分為\*\*?\s*{health_rating}\s*🌟?")
+    rating_pattern = re.compile(rf"\*\*?Health rating\*\*?\s*{health_rating}\s*🌟?")
 
     # Replace the matched pattern with the full health rating and the star rating
-    return rating_pattern.sub(f"**健康評分為** {health_rating}/10 {star_rating}", response_text)
+    return rating_pattern.sub(f"**Health rating** {health_rating}/10 {star_rating}", response_text)
 
 
 def extract_health_rating(response_text: str) -> int:
     # Use regex to find the health rating pattern that accounts for optional "**" markers and variations
-    rating_pattern = re.compile(r"\*\*?健康評分為\*\*?\s*(\d+)\s*🌟")
+    rating_pattern = re.compile(r"\*\*?Health rating\*\*?\s*(\d+)\s*🌟")
     
     # Search for the rating in the text
     match = rating_pattern.search(response_text)

@@ -15,8 +15,8 @@ PAYMENT_PROVIDER_TOKEN=""
 async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends an invoice without shipping-payment."""
     chat_id = update.message.chat_id
-    title = "Payment Example"
-    description = "Payment Example using python-telegram-bot"
+    title = "Lipo-Out Membership🌟"
+    description = "Coming soon!"
     # select a payload just for you to recognize its the donation from your bot
     payload = "Custom-Payload"
     # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token

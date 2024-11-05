@@ -4,7 +4,7 @@ import requests
 import base64
 from .chart import extract_nutrition_data
 
-API_BASE_URL = "http://127.0.0.1:8000"  # Adjust this URL to your backend
+API_BASE_URL = "https://lipo-out-backend-production.up.railway.app"  # Adjust this URL to your backend
 
 def write_food_photo_to_db(telegram_id: int, photo: bytes, response_text: str):
     # Step 1: Get the user by telegram_id

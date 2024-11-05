@@ -58,7 +58,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-API_BASE_URL = "http://127.0.0.1:8000"  # Adjust this to match your backend's base URL
+API_BASE_URL = "https://lipo-out-backend-production.up.railway.app"  # Adjust this URL to your backend
 
 # pre-starter
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
